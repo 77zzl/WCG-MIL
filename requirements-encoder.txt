@@ -1,0 +1,6 @@
+-r requirements.txt
+torchvision==0.18.0
+timm==1.0.15
+pillow==10.4.0
+pandas==2.2.2
+openpyxl==3.1.5

@@ -1,0 +1,30 @@
+import argparse
+
+
+def get_arguments():
+    
+    parser = argparse.ArgumentParser(description='NEST-MIL / NEST-MIL-Core')
+    parser.add_argument('--name', choices=['nest-mil', 'nest-mil-core'], default='nest-mil')
+    parser.add_argument('--dataset', choices=['camelyon_plus', 'bracs'], required=True)
+    parser.add_argument('--feature-root', required=True)
+    parser.add_argument('--fold', type=int, choices=range(1, 6), default=1)
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--epochs', type=int, default=60)
+    parser.add_argument('--warmup-epochs', type=int, default=5)
+    parser.add_argument('--patience', type=int, default=12)
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--weight-decay', type=float, default=1e-4)
+    parser.add_argument('--dropout', type=float, default=0.3)
+    parser.add_argument('--hidden-dim', type=int, default=256)
+    parser.add_argument('--presence-topk', type=int, default=8)
+    parser.add_argument('--presence-temperature', type=float, default=0.25)
+    parser.add_argument('--effective-beta', type=float, default=0.99)
+    parser.add_argument('--num-workers', type=int, default=0)
+    parser.add_argument('--device', default='cuda')
+    parser.add_argument('--output-dir', default='outputs')
+    parser.add_argument('--run-id')
+    parser.add_argument('--checkpoint', help='只评估该权重，不执行训练')
+    parser.add_argument('--resume-training', help='恢复本公开版本保存的完整训练状态')
+    parser.add_argument('--efficiency', action='store_true')
+    parser.add_argument('--disable-reference-residual', action='store_true')
+    return parser.parse_args()
