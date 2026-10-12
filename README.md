@@ -72,8 +72,8 @@ The default recipe is AdamW, learning rate and weight decay `1e-4`, dropout `0.3
 | `engine.py`, `utils.py` | Loss, prototype updates, checkpoints, and metrics |
 | `scripts/extract_bracs_features.py` | Frozen UNI encoding of BRACS ROIs |
 
-## License and encoder
+## UNI encoder
 
-Our source code is licensed under [MIT](LICENSE). UNI is separately governed by [CC BY-NC-ND 4.0 and MahmoodLab's additional access and usage terms](https://huggingface.co/MahmoodLab/UNI). Each user must obtain authorization and accept those terms. UNI weights are not included and must not be redistributed. Commercial use of UNI or derivatives, including models trained on its outputs, requires prior approval from MahmoodLab. Dataset licenses remain separate from the code license.
+UNI is governed by [CC BY-NC-ND 4.0 and MahmoodLab's additional access and usage terms](https://huggingface.co/MahmoodLab/UNI). Each user must obtain authorization and accept those terms. UNI weights are not included and must not be redistributed. Commercial use of UNI or derivatives, including models trained on its outputs, requires prior approval from MahmoodLab. Dataset use is governed by the respective providers' terms.
 
 When using UNI, cite [Chen et al., Nature Medicine, 2024](https://doi.org/10.1038/s41591-024-02857-3), [ViT](https://openreview.net/forum?id=YicbFdNTTy), and [DINOv2](https://openreview.net/forum?id=a68SUt6zFt), as requested by its provider.
