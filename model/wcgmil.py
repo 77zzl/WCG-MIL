@@ -25,17 +25,15 @@ class RefinementStage(nn.Module):
         return self.norm(features + self.update(torch.cat([features, context], dim=-1))) * valid
 
 
-class NESTMIL(nn.Module):
+class WCGMIL(nn.Module):
+    """WCG-MIL with SRG scoring and NRGC normal-reference grading."""
     
 
     def __init__(self, num_classes=4, feature_dim=1024, hidden_dim=256, num_stages=3,
-                 dropout=0.3, presence_topk=8, presence_temperature=0.25, reference=True,
-                 morphology_fp32=True):
+                 dropout=0.3, presence_topk=8, presence_temperature=0.25):
         
         super().__init__()
         self.num_classes = num_classes
-        self.reference = reference
-        self.morphology_fp32 = morphology_fp32
         self.presence_topk = presence_topk
         self.presence_temperature = presence_temperature
         self.projector = nn.Sequential(nn.Linear(feature_dim, hidden_dim), nn.LayerNorm(hidden_dim), nn.GELU())
@@ -53,10 +51,9 @@ class NESTMIL(nn.Module):
         self.arbitration_head = nn.Linear(7, 1)
         self.register_buffer('prototype_bank', torch.zeros(num_classes, 8, hidden_dim))
         self.register_buffer('prototype_ready', torch.tensor(False))
-        self.prototype_scale = nn.Parameter(torch.zeros(())) if reference else None
+        self.prototype_scale = nn.Parameter(torch.zeros(()))
         if num_classes != 4:
             self.morphology_head[-1] = nn.Linear(128, num_classes - 1)
-        self.prototype_residual_enabled = True
 
     def set_prototypes(self, prototypes):
         
@@ -69,6 +66,7 @@ class NESTMIL(nn.Module):
         values = F.relu(-changes[:, 1:] * changes[:, :-1]).mean(1)
         root = values.float().clamp_min(1e-12).sqrt()
         oscillation = torch.where(values > 0, root, torch.zeros_like(root)).to(values.dtype)
+        # SRG: convert stage-score reversal into instance reliability.
         reliability = torch.sigmoid(self.question_bias - F.softplus(self.question_alpha_raw) * oscillation)
         return reliability, oscillation
 
@@ -104,14 +102,14 @@ class NESTMIL(nn.Module):
         global_shape = (features * valid).sum(1) / valid.sum(1).clamp_min(1)
         weighted_shape = (features * tumor.unsqueeze(-1)).sum(1) / tumor.sum(1).unsqueeze(1).clamp_min(1e-6)
         morphology_logits = self.morphology_head(torch.cat([global_shape, weighted_shape], dim=1))
-        if self.morphology_fp32:
-            morphology_logits = morphology_logits.float()
+        morphology_logits = morphology_logits.float()
         morphology = morphology_logits.softmax(1)
         evidence = features.new_zeros((*features.shape[:2], self.num_classes - 1), dtype=torch.float32)
         normal_similarity = evidence[:, :, :1].clone()
         positive_similarity = evidence.clone()
         residual = morphology.new_zeros(morphology.shape)
-        if self.reference and bool(self.prototype_ready):
+        # NRGC: normal-relative prototype evidence, risk pooling and grade fusion.
+        if bool(self.prototype_ready):
             normalized = F.normalize(features.float(), dim=-1)
             bank = F.normalize(self.prototype_bank.float(), dim=-1)
             similarities = torch.einsum('bnd,ckd->bnck', normalized, bank)
@@ -121,8 +119,8 @@ class NESTMIL(nn.Module):
             attention_logits = evidence / 0.1 + tumor.detach().clamp_min(1e-6).log().unsqueeze(-1)
             attention = attention_logits.masked_fill(~mask.unsqueeze(-1), -1e4).softmax(1)
             residual = (attention * evidence).sum(1) * (0.5 * torch.tanh(self.prototype_scale))
-        applied_residual = residual if self.prototype_residual_enabled else torch.zeros_like(residual)
-        grade = (morphology.clamp_min(1e-8).log() + applied_residual).softmax(1) if self.reference else morphology
+        applied_residual = residual
+        grade = (morphology.clamp_min(1e-8).log() + applied_residual).softmax(1)
         presence = presence_logit.sigmoid()
         probabilities = torch.cat([1 - presence[:, None], presence[:, None] * grade], dim=1)
         output = {'logits': probabilities.clamp_min(1e-8).log(), 'presence_logit': presence_logit,
@@ -135,6 +133,5 @@ class NESTMIL(nn.Module):
                   'morphology_logits': morphology_logits, 'conditional_probability': grade,
                   'unapplied_residual': residual, 'tile_evidence': evidence,
                   'normal_similarity': normal_similarity, 'positive_similarity': positive_similarity}
-        if self.reference:
-            output['prototype_scale'] = (0.5 * torch.tanh(self.prototype_scale)).expand(inputs.size(0))
+        output['prototype_scale'] = (0.5 * torch.tanh(self.prototype_scale)).expand(inputs.size(0))
         return output

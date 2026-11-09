@@ -9,10 +9,10 @@ from pathlib import Path
 
 def main():
     
-    parser = argparse.ArgumentParser(description='Finite NEST-MIL reproduction queue')
+    parser = argparse.ArgumentParser(description='Finite WCG-MIL reproduction queue')
     parser.add_argument('--dataset', choices=['camelyon_plus', 'bracs'], required=True)
     parser.add_argument('--feature-root', required=True)
-    parser.add_argument('--models', nargs='+', choices=['nest-mil', 'nest-mil-core'], default=['nest-mil', 'nest-mil-core'])
+    parser.add_argument('--models', nargs='+', choices=['wcg-mil'], default=['wcg-mil'])
     parser.add_argument('--folds', nargs='+', type=int, choices=range(1, 6), default=[1, 2, 3, 4, 5])
     parser.add_argument('--seeds', nargs='+', type=int)
     parser.add_argument('--output-dir', default='outputs')

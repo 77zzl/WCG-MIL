@@ -3,8 +3,8 @@ import argparse
 
 def get_arguments():
     
-    parser = argparse.ArgumentParser(description='NEST-MIL / NEST-MIL-Core')
-    parser.add_argument('--name', choices=['nest-mil', 'nest-mil-core'], default='nest-mil')
+    parser = argparse.ArgumentParser(description='WCG-MIL')
+    parser.add_argument('--name', choices=['wcg-mil'], default='wcg-mil')
     parser.add_argument('--dataset', choices=['camelyon_plus', 'bracs'], required=True)
     parser.add_argument('--feature-root', required=True)
     parser.add_argument('--fold', type=int, choices=range(1, 6), default=1)
@@ -26,5 +26,4 @@ def get_arguments():
     parser.add_argument('--checkpoint', help='只评估该权重，不执行训练')
     parser.add_argument('--resume-training', help='恢复本公开版本保存的完整训练状态')
     parser.add_argument('--efficiency', action='store_true')
-    parser.add_argument('--disable-reference-residual', action='store_true')
     return parser.parse_args()

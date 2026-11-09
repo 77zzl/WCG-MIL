@@ -71,7 +71,7 @@ def joint_nll(logits, labels, class_weights=None, training_priors=None):
         items = items * weights[labels]
     return items.mean()
 
-class NESTTrainer:
+class WCGTrainer:
     
 
     def __init__(self, model, args, config, device, save_dir, log_dir):
@@ -296,7 +296,7 @@ class NESTTrainer:
                 for group in self.optimizer.param_groups:
                     group["lr"] = self.args.lr * epoch / max(1, self.args.warmup_epochs)
             train_metrics, _, _, _, _ = self._run_epoch(train_loader, True)
-            if self.model.reference and epoch > self.args.warmup_epochs:
+            if epoch > self.args.warmup_epochs:
                 self._refresh_prototypes()
             train_seconds = perf_counter() - epoch_start
             val_metrics, _, _, _, _ = self._run_epoch(val_loader, False)
@@ -310,13 +310,13 @@ class NESTTrainer:
             history.append(row)
             _save_json_atomic(history, self.log_dir / "history.json")
             self.epoch_diagnostics = {"epoch": epoch, "configuration": self.args.name}
-            if self.model.reference and bool(self.model.prototype_ready):
+            if bool(self.model.prototype_ready):
                 self.epoch_diagnostics["prototype_update"] = self.prototype_diagnostics
                 self.epoch_diagnostics["prototype_scale"] = float((0.5 * torch.tanh(self.model.prototype_scale)).detach())
             _save_json_atomic(self.epoch_diagnostics,
                               self.log_dir / f"reference_epoch_{epoch:03d}.json")
             print(f"轮次 {epoch:03d} | 验证宏F1 {val_metrics['macro_f1']:.4f} | 用时 {row['epoch_seconds']:.1f} 秒", flush=True)
-            eligible_for_best = not self.model.reference or bool(self.model.prototype_ready)
+            eligible_for_best = bool(self.model.prototype_ready)
             if eligible_for_best:
                 if val_metrics["macro_f1"] > best_score:
                     best_score, best_epoch, stale_epochs = val_metrics["macro_f1"], epoch, 0
@@ -328,10 +328,10 @@ class NESTTrainer:
                                                  "prototype_fallback": self.prototype_fallback}, checkpoint)
                 else:
                     stale_epochs += 1
-            if self.model.reference and epoch == self.args.warmup_epochs:
+            if epoch == self.args.warmup_epochs:
                 self._select_reservoir(train_loader.dataset)
                 self._refresh_prototypes(initial=True)
-            if epoch < self.args.warmup_epochs and self.model.reference:
+            if epoch < self.args.warmup_epochs:
                 self.model.prototype_ready.fill_(False)
             _save_checkpoint_atomic({
                 "epoch": epoch, "model": self.model.state_dict(),
@@ -373,7 +373,7 @@ class NESTTrainer:
                     prototype_active = prototype_active or bool(output["prototype_active"].any())
                 augmented_batches += int("augmented" in output)
                 if not torch.isfinite(loss) or not torch.isfinite(output["logits"]).all():
-                    self._numerical_failure("NEST-MIL非有限损失或预测", batch_index, sample_ids, inputs, output)
+                    self._numerical_failure("WCG-MIL非有限损失或预测", batch_index, sample_ids, inputs, output)
                 if training:
                     self.scaler.scale(loss).backward()
                     self.scaler.unscale_(self.optimizer)
@@ -390,7 +390,7 @@ class NESTTrainer:
                         skipped_steps += 1
                         overflow_count += 1
                         if overflow_count >= 8 or not self.scaler.is_enabled():
-                            self._numerical_failure("NEST-MIL连续八批梯度非有限", batch_index, sample_ids, inputs, output)
+                            self._numerical_failure("WCG-MIL连续八批梯度非有限", batch_index, sample_ids, inputs, output)
                 losses.append(float(loss.detach()))
                 labels_all.extend(labels.detach().cpu().tolist())
                 batch_probabilities = output["logits"].float().softmax(-1)

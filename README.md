@@ -1,79 +1,69 @@
-# NEST-MIL
+# WCG-MIL
 
-Code for **NEST-MIL: Noncompetitive normal referencing for weakly supervised metastasis grading**.
+This repository provides the training and evaluation code for the full WCG-MIL model using precomputed UNI patch features.
 
-- `nest-mil`: context refinement, sparse presence estimation, conditional morphology, and normal-referenced evidence.
-- `nest-mil-core`: the shared architecture without the prototype reference branch.
+WCG-MIL combines three-stage context refinement with **SRG** instance scoring and **NRGC** normal-reference grading. The slide prediction combines lesion presence with conditional grade probabilities.
 
-## Install
+## Installation
 
-The experiments used Python 3.12.12 and PyTorch 2.3.0 on an RTX 3090 Ti. For GPU training, first install a CUDA-enabled PyTorch 2.3.0 build following the [official instructions](https://pytorch.org/get-started/previous-versions/#v230), then install the requirements:
+Use Python 3.12 and a CUDA-enabled PyTorch 2.3 installation, then install the training dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-For BRACS feature extraction, also install `requirements-encoder.txt`.
+## Input data
 
-## Data
+Provide one PyTorch tensor per sample at `<feature-root>/<sample-id>.pt`. Each tensor must have shape `[number_of_patches, 1024]`. Sample identifiers must match the supplied split CSV files. Obtain the datasets and UNI features or encoder access from their respective providers.
 
-Store each feature bag as `<feature-root>/<sample-id>.pt`: a float32 tensor with shape `[number_of_patches, 1024]`.
-
-| Dataset | Classes | Partitions |
+| Dataset | Label order | Split files |
 |---|---|---|
-| [Camelyon+](https://doi.org/10.57760/sciencedb.16442) | negative, ITC, micro, macro | Five grouped folds in `splits/camelyon_plus/` |
-| [BRACS](https://www.bracs.icar.cnr.it/) | benign, atypical, malignant | Official ROI split in `splits/bracs/official.csv`; seeds 42, 43, 44 |
+| Camelyon+ | negative, ITC, micro, macro | `splits/camelyon_plus/fold_1.csv` through `fold_5.csv` |
+| BRACS | benign, atypical, malignant | `splits/bracs/official.csv` |
 
-Camelyon+ uses the released UNI feature bags. For BRACS, obtain the original `train`, `val`, and `test` ROI folders, `BRACS.xlsx`, and your own authorized UNI checkpoint, then run:
+The split CSV columns are `id`, `label`, `split`, and `group`. Preserve the supplied train/validation/test assignments. Camelyon+ group identifiers include dataset-defined case groups and should not all be interpreted as verified patient identifiers.
 
-```bash
-python scripts/extract_bracs_features.py --data-root /path/to/BRACS --cache-dir /path/to/bracs_uni --uni-checkpoint /path/to/pytorch_model.bin
-```
+## Train WCG-MIL
 
-This creates `<cache-dir>/features/`. Each ROI is one bag; native 256-pixel tiles are white-padded at image borders, resized to 224 pixels, and encoded with frozen UNI.
-
-## Run
-
-Train both configurations on the five Camelyon+ folds:
+Single Camelyon+ fold:
 
 ```bash
-python run.py --dataset camelyon_plus --feature-root /path/to/CamelyonPlus/UNI
+python main.py --name wcg-mil --dataset camelyon_plus --feature-root /path/to/UNI --fold 1 --seed 42
 ```
 
-Train both configurations on BRACS with all three seeds:
+All five Camelyon+ folds:
 
 ```bash
-python run.py --dataset bracs --feature-root /path/to/bracs_uni/features
+python run.py --dataset camelyon_plus --feature-root /path/to/UNI
 ```
 
-Train one configuration and fold:
+BRACS using the official split and seeds 42, 43 and 44:
 
 ```bash
-python main.py --name nest-mil --dataset camelyon_plus --feature-root /path/to/CamelyonPlus/UNI --fold 1 --seed 42 --efficiency
+python run.py --dataset bracs --feature-root /path/to/bracs_features
 ```
 
-Evaluate a saved checkpoint:
+The queue runs the full WCG-MIL model. Defaults use full bags, batch size 1, AdamW, learning rate and weight decay 0.0001, dropout 0.3, up to 60 epochs, five warm-up epochs, and validation Macro-F1 early stopping with patience 12. SRG uses top-8 presence pooling with temperature 0.25. NRGC builds its reference bank from the training partition.
+
+## Evaluate
 
 ```bash
-python main.py --name nest-mil --dataset camelyon_plus --feature-root /path/to/CamelyonPlus/UNI --fold 1 --checkpoint /path/to/best_model.pt
+python main.py --name wcg-mil --dataset camelyon_plus --feature-root /path/to/UNI --fold 1 --seed 42 --checkpoint /path/to/best_model.pt
 ```
 
-Use `--name nest-mil-core` for the Core configuration. Outputs are saved under `outputs/`. Repeating the queue command skips completed jobs and resumes unfinished runs; individual failures are recorded without stopping the entire queue. Remove a stale queue lock only after its previous process has exited. Full training recovery uses `last_training_state.pt` from the same run.
+Use the same dataset and fold as the checkpoint. Results are written under `outputs/`, including predictions, metrics, training history and checkpoints. The queue skips completed runs and attempts recovery from saved training states. For an individual recovery, provide the original `--run-id` together with `--resume-training /path/to/last_training_state.pt`.
 
-The default recipe is AdamW, learning rate and weight decay `1e-4`, dropout `0.3`, full bags, batch size one, 60 maximum epochs, five warm-up epochs, and validation Macro-F1 patience 12. Final probabilities combine presence with conditional grading as `[1-p, p*q]`.
+## Code map
 
-## Files
-
-| File | Purpose |
+| File | Role |
 |---|---|
-| `args.py`, `main.py`, `run.py` | Options, individual runs, and reproduction queue |
-| `data.py`, `splits/` | Feature bags and fixed partitions |
-| `model/` | NEST-MIL and NEST-MIL-Core |
-| `engine.py`, `utils.py` | Loss, prototype updates, checkpoints, and metrics |
-| `scripts/extract_bracs_features.py` | Frozen UNI encoding of BRACS ROIs |
+| `model/wcgmil.py` | WCGMIL, SRG and NRGC forward computation |
+| `engine.py` | Training, reference-bank updates and evaluation |
+| `data.py`, `splits/` | Feature loading and fixed data partitions |
+| `main.py`, `args.py` | Single-run interface |
+| `run.py` | Full-model reproduction queue |
+| `utils.py` | Seeding, checkpoint loading and output helpers |
 
-## UNI encoder
+Model parameter keys retain their existing descriptive names for state-dictionary compatibility. The optional `--efficiency` flag measures a small local forward-time probe; the paper's matched 30-bag benchmark uses a separate protocol.
 
-UNI is governed by [CC BY-NC-ND 4.0 and MahmoodLab's additional access and usage terms](https://huggingface.co/MahmoodLab/UNI). Each user must obtain authorization and accept those terms. UNI weights are not included and must not be redistributed. Commercial use of UNI or derivatives, including models trained on its outputs, requires prior approval from MahmoodLab. Dataset use is governed by the respective providers' terms.
-
-When using UNI, cite [Chen et al., Nature Medicine, 2024](https://doi.org/10.1038/s41591-024-02857-3), [ViT](https://openreview.net/forum?id=YicbFdNTTy), and [DINOv2](https://openreview.net/forum?id=a68SUt6zFt), as requested by its provider.
+Dataset access and UNI encoder use are subject to their providers' terms. Users must obtain the required data and encoder permissions separately.

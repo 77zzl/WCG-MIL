@@ -7,7 +7,7 @@ import torch
 
 from args import get_arguments
 from data import build_loaders
-from engine import NESTTrainer
+from engine import WCGTrainer
 from model.registry import create_model
 from utils import file_hash, load_model_checkpoint, save_json, set_seed
 
@@ -42,10 +42,8 @@ def main():
         raise ValueError('BRACS使用单个官方划分，重复单位是seed而不是fold。')
     if args.resume_training and not args.run_id:
         raise ValueError('恢复训练必须提供原run-id，避免把旧状态写入新任务。')
-    if not args.checkpoint and args.disable_reference_residual:
-        raise ValueError('关闭参照残差仅用于冻结评估，不用于论文模型训练。')
-    if not args.checkpoint and (args.warmup_epochs < 1 or args.epochs <= args.warmup_epochs) and args.name == 'nest-mil':
-        raise ValueError('NEST-MIL需在预热后继续训练并保存有效参照权重。')
+    if not args.checkpoint and (args.warmup_epochs < 1 or args.epochs <= args.warmup_epochs) and args.name == 'wcg-mil':
+        raise ValueError('WCG-MIL需在预热后继续训练并保存有效参照权重。')
     set_seed(args.seed)
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
     args.run_id = args.run_id or datetime.now().strftime('%Y%m%d_%H%M%S_%f')
@@ -65,11 +63,10 @@ def main():
     save_json({'arguments': vars(args), 'split_sizes': [len(loader.dataset) for loader in loaders],
                'torch_version': torch.__version__, 'device': str(device)}, directory / 'run_info.json')
     model = create_model(args.name, config, args).to(device)
-    trainer = NESTTrainer(model, args, config, device, directory, directory)
+    trainer = WCGTrainer(model, args, config, device, directory, directory)
     start = perf_counter()
     if args.checkpoint:
         checkpoint = load_model_checkpoint(model, args.checkpoint)
-        model.prototype_residual_enabled = not args.disable_reference_residual
         trainer._prepare_training_protocol(loaders[0])
         best_epoch = checkpoint.get('epoch', None)
         fit_seconds = 0.0
