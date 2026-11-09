@@ -51,7 +51,7 @@ The queue runs the full WCG-MIL model. Defaults use full bags, batch size 1, Ada
 python main.py --name wcg-mil --dataset camelyon_plus --feature-root /path/to/UNI --fold 1 --seed 42 --checkpoint /path/to/best_model.pt
 ```
 
-Use the same dataset and fold as the checkpoint. Results are written under `outputs/`, including predictions, metrics, training history and checkpoints. The queue skips completed runs and attempts recovery from saved training states. For an individual recovery, provide the original `--run-id` together with `--resume-training /path/to/last_training_state.pt`.
+Use the same dataset and fold as the checkpoint. Results are written under `outputs/`, including predictions and metrics. Training runs additionally save training history and checkpoints. The queue skips completed runs and attempts recovery from saved training states. Recovery requires matching source, split and training settings; a mismatch is recorded in `resume_rejected.json` and starts a fresh training run. Queue failures are recorded in `attempts.jsonl`, and the queue proceeds to the next job. For an individual recovery, provide the original `--run-id` together with `--resume-training /path/to/last_training_state.pt`.
 
 ## Code map
 
@@ -64,6 +64,6 @@ Use the same dataset and fold as the checkpoint. Results are written under `outp
 | `run.py` | Full-model reproduction queue |
 | `utils.py` | Seeding, checkpoint loading and output helpers |
 
-Model parameter keys retain their existing descriptive names for state-dictionary compatibility. The optional `--efficiency` flag measures a small local forward-time probe; the paper's matched 30-bag benchmark uses a separate protocol.
+Model parameter keys retain their existing descriptive names for state-dictionary compatibility. Single runs enable a small local forward-time probe with `--efficiency`; the reproduction queue enables this probe automatically; the paper's matched 30-bag benchmark uses a separate protocol.
 
 Dataset access and UNI encoder use are subject to their providers' terms. Users must obtain the required data and encoder permissions separately.

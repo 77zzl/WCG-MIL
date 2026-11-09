@@ -49,7 +49,5 @@ def load_model_checkpoint(model, path):
     
     checkpoint = torch.load(path, map_location='cpu', weights_only=False)
     state = checkpoint['model'] if 'model' in checkpoint else checkpoint
-    if not model.reference and 'prototype_bank' not in state and 'prototype_ready' not in state:
-        state = {**state, 'prototype_bank': model.prototype_bank, 'prototype_ready': model.prototype_ready}
     model.load_state_dict(state, strict=True)
     return checkpoint
